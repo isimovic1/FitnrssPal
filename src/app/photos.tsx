@@ -44,18 +44,19 @@ export default function Photos() {
     Alert.alert(`${label} · tjedan od ${shortDate(week)}`, undefined, [
       { text: 'Slikaj', onPress: () => pick(pose, 'camera') },
       { text: 'Iz galerije', onPress: () => pick(pose, 'gallery') },
-      ...(existing
-        ? [{
+      // Android shows at most three buttons, so "Obriši" takes the place of "Odustani";
+      // the dialog can still be dismissed by tapping outside it.
+      existing
+        ? {
             text: 'Obriši',
             style: 'destructive' as const,
             onPress: () => {
               deletePhotoFile(existing);
               setPhoto(week, pose, undefined);
             },
-          }]
-        : []),
-      { text: 'Odustani', style: 'cancel' as const },
-    ]);
+          }
+        : { text: 'Odustani', style: 'cancel' as const },
+    ], { cancelable: true });
   };
 
   const weeks = Object.values(state.photos).sort((a, b) => b.week.localeCompare(a.week));
