@@ -58,8 +58,8 @@ export default function Scan() {
         ? `Nije moguće dohvatiti podatke (${result.message}). Provjeri internetsku vezu.`
         : result.status === 'incomplete'
           ? `Proizvod${result.name ? ` "${result.name}"` : ''} je u bazi, ali bez nutritivnih vrijednosti.`
-          : `Proizvod ${barcode} nije pronađen u bazi.`;
-    Alert.alert('Proizvod nije pronađen', `${message}\n\nMožeš ga sam unijeti s etikete — sljedeći put će se prepoznati odmah.`, [
+          : 'Proizvod nije pronađen u bazi Open Food Facts.';
+    Alert.alert('Proizvod nije pronađen', `Bar-kod: ${barcode}\n${message}\n\nMožeš ga sam unijeti s etikete — sljedeći put će se prepoznati odmah.`, [
       { text: 'Skeniraj ponovo', style: 'cancel', onPress: () => (handling.current = false) },
       {
         text: 'Unesi ručno',

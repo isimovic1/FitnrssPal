@@ -3,7 +3,7 @@ import { test } from 'node:test';
 
 import { bmi, bmr, calorieGoal, daysToGoal, macroGoals, scaleNutrients, weightOn, weightTrendPerDay } from '../src/lib/calc';
 import { addDays, dateRange, endOfMonth, startOfWeek } from '../src/lib/dates';
-import { extractBarcode, productToFood } from '../src/lib/openFoodFacts';
+import { barcodeVariants, extractBarcode, productToFood } from '../src/lib/openFoodFacts';
 import { periodReport } from '../src/lib/reports';
 import { EMPTY_STATE, reducer } from '../src/lib/store';
 import type { AppState, Profile } from '../src/lib/types';
@@ -97,6 +97,25 @@ test('productToFood falls back to kJ when kcal is missing', () => {
   assert.equal(f?.per100g.kcal, 100);
   assert.equal(f?.per100g.protein, 5);
   assert.equal(productToFood({ product_name: 'Y', nutriments: {} }), null);
+});
+
+test('productToFood reads plain and prepared values', () => {
+  const plain = productToFood({ product_name: 'Mlijeko', nutrition_data_per: '100g', nutriments: { 'energy-kcal': 64, proteins: 3.2 } }, '1');
+  assert.equal(plain?.per100g.kcal, 64);
+  assert.equal(plain?.per100g.protein, 3.2);
+  const perServing = productToFood({ product_name: 'X', nutrition_data_per: 'serving', nutriments: { 'energy-kcal': 200 } }, '2');
+  assert.equal(perServing, null);
+  const prepared = productToFood({ product_name: 'Y', nutriments: { 'energy-kcal_prepared_100g': 50 } }, '3');
+  assert.equal(prepared?.per100g.kcal, 50);
+});
+
+test('barcodeVariants covers UPC/EAN/GTIN forms', () => {
+  const v = barcodeVariants('036000291452');
+  assert.ok(v.includes('036000291452'));
+  assert.ok(v.includes('0036000291452'));
+  assert.ok(v.includes('36000291452'));
+  assert.equal(barcodeVariants('3850108020052')[0], '3850108020052');
+  assert.ok(barcodeVariants('3850108020052').includes('03850108020052'));
 });
 
 test('reducer adds entries and recomputes on update', () => {

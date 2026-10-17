@@ -7,7 +7,7 @@ const BASE = 'https://world.openfoodfacts.org';
 const HEADERS = { 'User-Agent': 'FitnrssPal/1.0 (personal calorie tracker)' };
 const FIELDS = [
   'code', 'product_name', 'product_name_hr', 'product_name_en', 'brands',
-  'nutriments', 'serving_size', 'serving_quantity', 'image_front_small_url',
+  'nutriments', 'nutrition_data_per', 'serving_size', 'serving_quantity', 'image_front_small_url',
 ].join(',');
 
 interface OffProduct {
@@ -17,6 +17,7 @@ interface OffProduct {
   product_name_en?: string;
   brands?: string;
   nutriments?: Record<string, number | string | undefined>;
+  nutrition_data_per?: string;
   serving_size?: string;
   serving_quantity?: number | string;
   image_front_small_url?: string;
@@ -27,27 +28,36 @@ function num(v: unknown): number | undefined {
   return Number.isFinite(n) ? n : undefined;
 }
 
-function toNutrients(n: Record<string, unknown> = {}): Nutrients | null {
-  let kcal = num(n['energy-kcal_100g']);
+/**
+ * Reads per-100 g values. Products are not entered consistently: some only have
+ * the plain "energy-kcal" value (already per 100 g when nutrition_data_per is
+ * "100g"), some only kJ, and some only "prepared" values (e.g. powdered milk).
+ */
+function toNutrients(n: Record<string, unknown> = {}, per?: string): Nutrients | null {
+  const plainIsPer100 = !per || per === '100g' || per === '100ml';
+  const read = (key: string): number | undefined =>
+    num(n[`${key}_100g`]) ?? num(n[`${key}_prepared_100g`]) ?? (plainIsPer100 ? num(n[key]) : undefined);
+
+  let kcal = read('energy-kcal');
   if (kcal === undefined) {
-    const kj = num(n['energy-kj_100g']) ?? num(n['energy_100g']);
+    const kj = read('energy-kj') ?? read('energy');
     if (kj !== undefined) kcal = Math.round((kj / 4.184) * 10) / 10;
   }
   if (kcal === undefined) return null;
   return {
     kcal,
-    protein: num(n['proteins_100g']) ?? 0,
-    carbs: num(n['carbohydrates_100g']) ?? 0,
-    fat: num(n['fat_100g']) ?? 0,
-    fiber: num(n['fiber_100g']),
-    sugar: num(n['sugars_100g']),
-    saturatedFat: num(n['saturated-fat_100g']),
-    salt: num(n['salt_100g']),
+    protein: read('proteins') ?? 0,
+    carbs: read('carbohydrates') ?? 0,
+    fat: read('fat') ?? 0,
+    fiber: read('fiber'),
+    sugar: read('sugars'),
+    saturatedFat: read('saturated-fat'),
+    salt: read('salt'),
   };
 }
 
 export function productToFood(p: OffProduct, barcode?: string): Food | null {
-  const per100g = toNutrients(p.nutriments);
+  const per100g = toNutrients(p.nutriments, p.nutrition_data_per);
   const name = p.product_name_hr || p.product_name || p.product_name_en;
   const code = barcode ?? p.code;
   if (!per100g || !name) return null;
@@ -71,21 +81,48 @@ export type LookupResult =
   | { status: 'not_found' }
   | { status: 'error'; message: string };
 
-export async function lookupBarcode(barcode: string): Promise<LookupResult> {
-  try {
-    const res = await fetch(`${BASE}/api/v2/product/${encodeURIComponent(barcode)}.json?fields=${FIELDS}`, {
-      headers: HEADERS,
-    });
-    if (res.status === 404) return { status: 'not_found' };
-    if (!res.ok) return { status: 'error', message: `HTTP ${res.status}` };
-    const json = (await res.json()) as { status?: number; product?: OffProduct };
-    if (json.status !== 1 || !json.product) return { status: 'not_found' };
-    const food = productToFood(json.product, barcode);
-    if (!food) return { status: 'incomplete', name: json.product.product_name };
-    return { status: 'found', food };
-  } catch (e) {
-    return { status: 'error', message: e instanceof Error ? e.message : String(e) };
+/**
+ * The same product can be stored as UPC-A (12 digits), EAN-13 with a leading
+ * zero, or GTIN-14, and scanners report whichever form they decode.
+ */
+export function barcodeVariants(barcode: string): string[] {
+  const stripped = barcode.replace(/^0+/, '');
+  const out = [barcode];
+  for (const len of [8, 12, 13, 14]) {
+    if (stripped.length <= len) out.push(stripped.padStart(len, '0'));
   }
+  out.push(stripped);
+  return [...new Set(out)].filter((c) => c.length >= 8);
+}
+
+async function fetchProduct(code: string): Promise<LookupResult> {
+  const res = await fetch(`${BASE}/api/v2/product/${encodeURIComponent(code)}.json?fields=${FIELDS}`, {
+    headers: HEADERS,
+  });
+  if (res.status === 404) return { status: 'not_found' };
+  if (!res.ok) return { status: 'error', message: `HTTP ${res.status}` };
+  const json = (await res.json()) as { status?: number; product?: OffProduct };
+  if (json.status !== 1 || !json.product) return { status: 'not_found' };
+  const food = productToFood(json.product, code);
+  if (!food) return { status: 'incomplete', name: json.product.product_name };
+  return { status: 'found', food };
+}
+
+export async function lookupBarcode(barcode: string): Promise<LookupResult> {
+  let best: LookupResult = { status: 'not_found' };
+  for (const code of barcodeVariants(barcode)) {
+    let result: LookupResult;
+    try {
+      result = await fetchProduct(code);
+    } catch (e) {
+      result = { status: 'error', message: e instanceof Error ? e.message : String(e) };
+    }
+    if (result.status === 'found') return result;
+    // Prefer telling the user the product exists without nutrition data, then a
+    // network error, over a plain "not found".
+    if (result.status === 'incomplete' || (result.status === 'error' && best.status === 'not_found')) best = result;
+  }
+  return best;
 }
 
 export async function searchProducts(query: string): Promise<Food[]> {
