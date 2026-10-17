@@ -2,8 +2,8 @@ import Ionicons from '@expo/vector-icons/Ionicons';
 import { BarcodeScanningResult, CameraView, useCameraPermissions } from 'expo-camera';
 import * as Haptics from 'expo-haptics';
 import { router, useLocalSearchParams } from 'expo-router';
-import { useRef, useState } from 'react';
-import { ActivityIndicator, Alert, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
+import { useEffect, useRef, useState } from 'react';
+import { ActivityIndicator, Alert, Platform, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { Button } from '../components/ui';
@@ -14,6 +14,14 @@ import { useStore } from '../lib/store';
 import type { MealType } from '../lib/types';
 import { colors, spacing } from '../theme';
 
+const BARCODE_TYPES = ['ean13', 'ean8', 'upc_a', 'upc_e', 'qr'] as const;
+
+// On Android the Google code scanner (Play Services) is far more reliable than
+// analysing frames from our own camera view, so it is the default there.
+const GOOGLE_SCANNER = Platform.OS === 'android' && CameraView.isModernBarcodeScannerAvailable;
+
+type Mode = 'google' | 'camera';
+
 export default function Scan() {
   const params = useLocalSearchParams<{ date?: string; meal?: MealType }>();
   const date = params.date ?? todayKey();
@@ -23,17 +31,19 @@ export default function Scan() {
   const [busy, setBusy] = useState(false);
   const [torch, setTorch] = useState(false);
   const [manual, setManual] = useState('');
+  const [mode, setMode] = useState<Mode>(GOOGLE_SCANNER ? 'google' : 'camera');
   // Camera fires many events per second; only handle one code at a time.
   const handling = useRef(false);
+  const release = () => (handling.current = false);
 
   const handleCode = async (raw: string) => {
     if (handling.current) return;
     handling.current = true;
     const barcode = extractBarcode(raw);
     if (!barcode) {
-      Alert.alert('Nepoznat kod', 'Ovaj kod ne sadrži bar-kod proizvoda.', [
-        { text: 'U redu', onPress: () => (handling.current = false) },
-      ]);
+      Alert.alert('Nepoznat kod', `Pročitano: ${raw}\nOvaj kod ne sadrži bar-kod proizvoda.`, [{ text: 'U redu', onPress: release }], {
+        onDismiss: release,
+      });
       return;
     }
     Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
@@ -60,17 +70,75 @@ export default function Scan() {
           ? `Proizvod${result.name ? ` "${result.name}"` : ''} je u bazi, ali bez nutritivnih vrijednosti.`
           : 'Proizvod nije pronađen u bazi Open Food Facts.';
     Alert.alert('Proizvod nije pronađen', `Bar-kod: ${barcode}\n${message}\n\nMožeš ga sam unijeti s etikete — sljedeći put će se prepoznati odmah.`, [
-      { text: 'Skeniraj ponovo', style: 'cancel', onPress: () => (handling.current = false) },
+      { text: 'Skeniraj ponovo', style: 'cancel', onPress: release },
       {
         text: 'Unesi ručno',
         onPress: () => router.replace({ pathname: '/custom-food', params: { date, meal, barcode } }),
       },
-    ]);
+    ], { onDismiss: release });
   };
+
+  const handleCodeRef = useRef(handleCode);
+  handleCodeRef.current = handleCode;
+
+  const launchGoogleScanner = async () => {
+    try {
+      await CameraView.launchScanner({ barcodeTypes: [...BARCODE_TYPES] });
+    } catch (e) {
+      const message = e instanceof Error ? e.message : String(e);
+      if (/cancel/i.test(message)) return;
+      // No Play Services (or the scanner module failed): use our own camera view.
+      setMode('camera');
+    }
+  };
+
+  useEffect(() => {
+    if (mode !== 'google') return;
+    const sub = CameraView.onModernBarcodeScanned((r) => handleCodeRef.current(r.data));
+    launchGoogleScanner();
+    return () => sub.remove();
+  }, [mode]);
 
   const onScanned = (r: BarcodeScanningResult) => {
     if (!busy) handleCode(r.data);
   };
+
+  const manualEntry = busy ? (
+    <ActivityIndicator color="#fff" size="large" />
+  ) : (
+    <View style={s.manualRow}>
+      <TextInput
+        value={manual}
+        onChangeText={setManual}
+        placeholder="ili upiši bar-kod"
+        placeholderTextColor="#aaa"
+        keyboardType="number-pad"
+        style={s.manualInput}
+        onSubmitEditing={() => manual && handleCode(manual)}
+      />
+      <Button title="Traži" onPress={() => handleCode(manual)} disabled={!manual} style={{ paddingVertical: 10 }} />
+    </View>
+  );
+
+  if (mode === 'google') {
+    return (
+      <SafeAreaView style={[s.black, { justifyContent: 'space-between' }]}>
+        <View style={s.topBar}>
+          <Pressable onPress={() => router.back()} hitSlop={12}>
+            <Ionicons name="close" size={30} color="#fff" />
+          </Pressable>
+          <Text style={[s.white, { fontWeight: '700' }]}>Skeniraj bar-kod ili QR</Text>
+          <View style={{ width: 30 }} />
+        </View>
+        <View style={{ padding: spacing.xl, gap: spacing.md, alignItems: 'center' }}>
+          <Ionicons name="barcode-outline" size={96} color="#fff" />
+          <Button title="Skeniraj" onPress={launchGoogleScanner} disabled={busy} style={{ alignSelf: 'stretch' }} />
+          <Button title="Koristi kameru u aplikaciji" variant="ghost" onPress={() => setMode('camera')} />
+        </View>
+        <View style={s.bottom}>{manualEntry}</View>
+      </SafeAreaView>
+    );
+  }
 
   if (!permission) return <View style={s.black} />;
 
@@ -81,7 +149,7 @@ export default function Scan() {
           style={StyleSheet.absoluteFill}
           facing="back"
           enableTorch={torch}
-          barcodeScannerSettings={{ barcodeTypes: ['ean13', 'ean8', 'upc_a', 'upc_e', 'qr'] }}
+          barcodeScannerSettings={{ barcodeTypes: [...BARCODE_TYPES] }}
           onBarcodeScanned={busy ? undefined : onScanned}
         />
       ) : (
@@ -109,24 +177,7 @@ export default function Scan() {
           </View>
         )}
 
-        <View style={s.bottom}>
-          {busy ? (
-            <ActivityIndicator color="#fff" size="large" />
-          ) : (
-            <View style={s.manualRow}>
-              <TextInput
-                value={manual}
-                onChangeText={setManual}
-                placeholder="ili upiši bar-kod"
-                placeholderTextColor="#aaa"
-                keyboardType="number-pad"
-                style={s.manualInput}
-                onSubmitEditing={() => manual && handleCode(manual)}
-              />
-              <Button title="Traži" onPress={() => handleCode(manual)} disabled={!manual} style={{ paddingVertical: 10 }} />
-            </View>
-          )}
-        </View>
+        <View style={s.bottom}>{manualEntry}</View>
       </SafeAreaView>
     </View>
   );
