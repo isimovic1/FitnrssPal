@@ -1,6 +1,7 @@
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { BarcodeScanningResult, CameraView, scanFromURLAsync, useCameraPermissions } from 'expo-camera';
 import * as Haptics from 'expo-haptics';
+import * as ImagePicker from 'expo-image-picker';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, Alert, Platform, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
@@ -31,12 +32,14 @@ export default function Scan() {
   const [busy, setBusy] = useState(false);
   const [torch, setTorch] = useState(false);
   const [manual, setManual] = useState('');
-  const [mode, setMode] = useState<Mode>(GOOGLE_SCANNER ? 'google' : 'camera');
+  // Android starts on a chooser screen: the in-app camera view does not report
+  // barcodes on some devices, so it is only used when picked explicitly.
+  const [mode, setMode] = useState<Mode>(Platform.OS === 'android' ? 'google' : 'camera');
+  const [googleOk, setGoogleOk] = useState(GOOGLE_SCANNER);
   // Why the Google scanner is not in use, shown small on the camera screen to help diagnose devices.
   const [fallbackReason, setFallbackReason] = useState(
     Platform.OS === 'android' && !GOOGLE_SCANNER ? 'Google skener nije dostupan na ovom uređaju' : '',
   );
-  const cameraRef = useRef<CameraView>(null);
   // Camera fires many events per second; only handle one code at a time.
   const handling = useRef(false);
   const release = () => (handling.current = false);
@@ -92,34 +95,44 @@ export default function Scan() {
     } catch (e) {
       const message = e instanceof Error ? e.message : String(e);
       if (/cancel/i.test(message)) return;
-      // No Play Services (or the scanner module failed): use our own camera view.
+      // No Play Services (or the scanner module failed): offer the photo options instead.
       setFallbackReason(`Google skener: ${message}`);
-      setMode('camera');
+      setGoogleOk(false);
     }
   };
 
-  // Fallback for devices where live frame analysis reports nothing: take a
-  // photo and let ML Kit look for a barcode in the still image.
-  const scanPhoto = async () => {
+  // Fallback for devices where neither the Google scanner nor live frame
+  // analysis works: take the photo with the phone's own camera app (or pick one
+  // from the gallery) and let ML Kit look for a barcode in the still image.
+  const scanPhoto = async (source: 'camera' | 'gallery') => {
     if (busy || handling.current) return;
-    setBusy(true);
     try {
-      const photo = await cameraRef.current?.takePictureAsync({ quality: 0.8 });
-      const results = photo ? await scanFromURLAsync(photo.uri, [...BARCODE_TYPES]) : [];
+      if (source === 'camera') {
+        const perm = await ImagePicker.requestCameraPermissionsAsync();
+        if (!perm.granted) return Alert.alert('Kamera', 'Za slikanje bar-koda potreban je pristup kameri.');
+      }
+      const options: ImagePicker.ImagePickerOptions = { mediaTypes: ['images'], quality: 0.9 };
+      const picked =
+        source === 'camera' ? await ImagePicker.launchCameraAsync(options) : await ImagePicker.launchImageLibraryAsync(options);
+      if (picked.canceled || !picked.assets[0]) return;
+      setBusy(true);
+      const results = await scanFromURLAsync(picked.assets[0].uri, [...BARCODE_TYPES]);
       setBusy(false);
       if (results.length) handleCode(results[0].data);
       else Alert.alert('Bar-kod nije pronađen', 'Približi bar-kod da zauzme veći dio slike, izbjegni odsjaj i pokušaj ponovo.');
     } catch (e) {
       setBusy(false);
-      Alert.alert('Skeniranje slike nije uspjelo', e instanceof Error ? e.message : String(e));
+      Alert.alert('Skeniranje slike nije uspjelo', `${e instanceof Error ? e.message : String(e)}\n\nUpiši brojeve ispod bar-koda u polje na dnu.`);
     }
   };
 
   useEffect(() => {
-    if (mode !== 'google') return;
+    if (mode !== 'google' || !googleOk) return;
     const sub = CameraView.onModernBarcodeScanned((r) => handleCodeRef.current(r.data));
     launchGoogleScanner();
     return () => sub.remove();
+    // Launch once per visit to the chooser, not again when googleOk flips to false.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [mode]);
 
   const onScanned = (r: BarcodeScanningResult) => {
@@ -155,10 +168,17 @@ export default function Scan() {
         </View>
         <View style={{ padding: spacing.xl, gap: spacing.md, alignItems: 'center' }}>
           <Ionicons name="barcode-outline" size={96} color="#fff" />
-          <Button title="Skeniraj" onPress={launchGoogleScanner} disabled={busy} style={{ alignSelf: 'stretch' }} />
+          {googleOk && (
+            <Button title="Skeniraj" onPress={launchGoogleScanner} disabled={busy} style={{ alignSelf: 'stretch' }} />
+          )}
+          <Button title="Slikaj bar-kod kamerom mobitela" variant={googleOk ? 'secondary' : 'primary'} onPress={() => scanPhoto('camera')} disabled={busy} style={{ alignSelf: 'stretch' }} />
+          <Button title="Odaberi sliku iz galerije" variant="secondary" onPress={() => scanPhoto('gallery')} disabled={busy} style={{ alignSelf: 'stretch' }} />
           <Button title="Koristi kameru u aplikaciji" variant="ghost" onPress={() => setMode('camera')} />
         </View>
-        <View style={s.bottom}>{manualEntry}</View>
+        <View style={[s.bottom, { gap: spacing.sm }]}>
+          {manualEntry}
+          {fallbackReason ? <Text style={s.hint}>{fallbackReason}</Text> : null}
+        </View>
       </SafeAreaView>
     );
   }
@@ -169,7 +189,6 @@ export default function Scan() {
     <View style={s.black}>
       {permission.granted ? (
         <CameraView
-          ref={cameraRef}
           style={StyleSheet.absoluteFill}
           facing="back"
           enableTorch={torch}
@@ -202,8 +221,11 @@ export default function Scan() {
         )}
 
         <View style={[s.bottom, { gap: spacing.sm }]}>
-          {permission.granted && !busy && (
-            <Button title="Slikaj bar-kod" onPress={scanPhoto} style={{ paddingVertical: 10 }} />
+          {!busy && (
+            <View style={s.manualRow}>
+              <Button title="Slikaj bar-kod" onPress={() => scanPhoto('camera')} style={{ flex: 1, paddingVertical: 10 }} />
+              <Button title="Iz galerije" variant="secondary" onPress={() => scanPhoto('gallery')} style={{ paddingVertical: 10 }} />
+            </View>
           )}
           {manualEntry}
           {fallbackReason ? <Text style={s.hint}>{fallbackReason}</Text> : null}
