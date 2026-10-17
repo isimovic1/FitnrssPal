@@ -29,6 +29,7 @@ function RootNavigator() {
         <Stack.Screen name="scan" options={{ title: 'Skeniraj bar-kod', presentation: 'fullScreenModal', headerShown: false }} />
         <Stack.Screen name="add-exercise" options={{ title: 'Dodaj aktivnost', presentation: 'modal' }} />
         <Stack.Screen name="log-weight" options={{ title: 'Unesi težinu', presentation: 'modal' }} />
+        <Stack.Screen name="photos" options={{ title: 'Slike napretka' }} />
       </Stack.Protected>
     </Stack>
   );

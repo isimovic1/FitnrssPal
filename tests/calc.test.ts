@@ -4,6 +4,7 @@ import { test } from 'node:test';
 import { bmi, bmr, calorieGoal, daysToGoal, macroGoals, scaleNutrients, weightOn, weightTrendPerDay } from '../src/lib/calc';
 import { addDays, dateRange, endOfMonth, startOfWeek } from '../src/lib/dates';
 import { barcodeVariants, extractBarcode, productToFood } from '../src/lib/openFoodFacts';
+import { comparePair } from '../src/lib/photos';
 import { periodReport } from '../src/lib/reports';
 import { EMPTY_STATE, reducer } from '../src/lib/store';
 import type { AppState, Profile } from '../src/lib/types';
@@ -159,4 +160,17 @@ test('period report sums deficit over logged days only', () => {
   // A day still in progress is not counted towards the deficit.
   assert.equal(periodReport(s, '2026-10-12', '2026-10-18', '2026-10-13').deficitDays, 1);
   assert.ok(Math.abs(r.actualKgChange! - -0.4) < 1e-9);
+});
+
+test('setPhoto stores weekly photos and comparePair finds first and latest week', () => {
+  let s: AppState = EMPTY_STATE;
+  s = reducer(s, { type: 'setPhoto', week: '2026-10-05', pose: 'front', uri: 'file:///a.jpg' });
+  s = reducer(s, { type: 'setPhoto', week: '2026-10-12', pose: 'side', uri: 'file:///b.jpg' });
+  s = reducer(s, { type: 'setPhoto', week: '2026-10-19', pose: 'front', uri: 'file:///c.jpg' });
+  const pair = comparePair(s.photos, 'front')!;
+  assert.equal(pair.first.week, '2026-10-05');
+  assert.equal(pair.latest.week, '2026-10-19');
+  assert.equal(comparePair(s.photos, 'back'), null);
+  s = reducer(s, { type: 'setPhoto', week: '2026-10-12', pose: 'side', uri: undefined });
+  assert.equal(s.photos['2026-10-12'], undefined); // empty weeks are dropped
 });

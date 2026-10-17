@@ -1,11 +1,12 @@
 import { router } from 'expo-router';
 import { useState } from 'react';
-import { Alert, Pressable, Text } from 'react-native';
+import { Alert, Image, Pressable, Text } from 'react-native';
 
 import { LineChart } from '../../components/charts';
 import { Button, Card, fmt, ProgressBar, Row, Screen, Segmented, Stat, styles } from '../../components/ui';
 import { bmi, bmiCategory, calorieGoal, daysToGoal, KCAL_PER_KG, round1, weightTrendPerDay } from '../../lib/calc';
-import { addDays, daysBetween, friendlyDate, fromDateKey, shortDate, todayKey } from '../../lib/dates';
+import { addDays, daysBetween, friendlyDate, fromDateKey, shortDate, startOfWeek, todayKey } from '../../lib/dates';
+import { comparePair } from '../../lib/photos';
 import { useProfile, useStore } from '../../lib/store';
 import { colors, spacing } from '../../theme';
 
@@ -22,6 +23,7 @@ export default function Progress() {
   const [range, setRange] = useState<Range>('90');
   const today = todayKey();
   const weights = state.weights;
+  const photoPair = comparePair(state.photos, 'front');
 
   const current = weights.length ? weights[weights.length - 1].kg : profile.startWeightKg;
   const start = profile.startWeightKg;
@@ -65,6 +67,28 @@ export default function Progress() {
             ? 'Cilj postignut! 🎉'
             : `Promjena od početka: ${signed(-lost)} kg · do cilja još ${fmt(Math.abs(round1(current - goal)), 1)} kg (${fmt(pct * 100)} %)`}
         </Text>
+      </Card>
+
+      <Card
+        title="Slike napretka"
+        right={<Button title="Otvori" variant="secondary" style={{ paddingVertical: 6 }} onPress={() => router.push('/photos')} />}
+        style={!state.photos[startOfWeek(today)] ? { borderWidth: 1.5, borderColor: colors.warning } : undefined}
+      >
+        {photoPair ? (
+          <Row style={{ alignItems: 'flex-start' }}>
+            {[{ t: 'Početak', p: photoPair.first }, { t: 'Sada', p: photoPair.latest }].map(({ t, p }) => (
+              <Pressable key={t} onPress={() => router.push('/photos')} style={{ flex: 1, gap: 4 }}>
+                <Image source={{ uri: p.front }} style={{ aspectRatio: 3 / 4, borderRadius: 10 }} resizeMode="cover" />
+                <Text style={[styles.muted, { textAlign: 'center', fontSize: 12 }]}>{t} · {shortDate(p.week)}</Text>
+              </Pressable>
+            ))}
+          </Row>
+        ) : (
+          <Text style={styles.muted}>Jednom tjedno (početkom tjedna) slikaj se sprijeda, straga i bočno pa uspoređuj početak i sada.</Text>
+        )}
+        {!state.photos[startOfWeek(today)] && (
+          <Text style={{ color: colors.warning, fontSize: 12 }}>Ovaj tjedan još nema slika.</Text>
+        )}
       </Card>
 
       <Card title="Težina" right={<Button title="+ Unesi" variant="secondary" style={{ paddingVertical: 6 }} onPress={() => router.push('/log-weight')} />}>

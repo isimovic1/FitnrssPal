@@ -5,6 +5,7 @@ import { Alert, Text } from 'react-native';
 import { Button, Card, Field, parseNum, Row, Screen, styles } from '../components/ui';
 import { weightOn } from '../lib/calc';
 import { friendlyDate, todayKey } from '../lib/dates';
+import { WEIGH_IN_TIP } from '../lib/photos';
 import { useProfile, useStore } from '../lib/store';
 
 export default function LogWeight() {
@@ -36,7 +37,7 @@ export default function LogWeight() {
           <Field label="Opseg struka (opcionalno)" suffix="cm" value={waist} onChangeText={setWaist} keyboardType="decimal-pad" />
           <Field label="% masti (opcionalno)" suffix="%" value={bodyFat} onChangeText={setBodyFat} keyboardType="decimal-pad" />
         </Row>
-        <Text style={styles.muted}>Savjet: važi se ujutro, nakon WC-a, prije doručka.</Text>
+        <Text style={styles.muted}>{WEIGH_IN_TIP}</Text>
       </Card>
       <Button title="Spremi" onPress={save} />
     </Screen>

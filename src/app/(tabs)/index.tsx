@@ -6,13 +6,14 @@ import { Alert, Pressable, Text, TextInput, View } from 'react-native';
 import { Ring } from '../../components/charts';
 import { Button, Card, fmt, parseNum, ProgressBar, Row, Screen, Stat, styles } from '../../components/ui';
 import { calorieGoal, macroGoals, weightOn } from '../../lib/calc';
+import { WEIGH_IN_TIP } from '../../lib/photos';
 import { addDays, friendlyDate, todayKey } from '../../lib/dates';
 import { summarizeDay } from '../../lib/reports';
 import { useProfile, useStore } from '../../lib/store';
 import { colors, MEAL_LABELS, MEAL_ORDER, spacing } from '../../theme';
 
 export default function Diary() {
-  const { state, removeExercise, setExtras } = useStore();
+  const { state, removeExercise, setExtras, setWeight } = useStore();
   const profile = useProfile();
   const [date, setDate] = useState(todayKey());
 
@@ -39,6 +40,15 @@ export default function Diary() {
           <Ionicons name="chevron-forward" size={24} color={isToday ? colors.border : colors.primary} />
         </Pressable>
       </Row>
+
+      <WeighIn
+        key={date}
+        isToday={isToday}
+        logged={day.weightKg}
+        last={weight}
+        onSave={(kg) => setWeight({ ...state.weights.find((w) => w.date === date), date, kg })}
+        onMore={() => router.push({ pathname: '/log-weight', params: { date } })}
+      />
 
       <Card title="Kalorije">
         <Row style={{ justifyContent: 'center', gap: spacing.xl }}>
@@ -164,19 +174,6 @@ export default function Diary() {
         <StepsInput key={date} value={day.steps} onSave={(steps) => setExtras(date, { steps })} />
       </Card>
 
-      <Card title="Težina">
-        <Row style={{ justifyContent: 'space-between' }}>
-          <Text style={styles.text}>
-            {day.weightKg !== undefined ? `${fmt(day.weightKg, 1)} kg (izvagano)` : `Zadnja: ${fmt(weight, 1)} kg`}
-          </Text>
-          <Button
-            title="Unesi"
-            variant="secondary"
-            style={{ paddingVertical: 8 }}
-            onPress={() => router.push({ pathname: '/log-weight', params: { date } })}
-          />
-        </Row>
-      </Card>
     </Screen>
   );
 }
@@ -233,5 +230,69 @@ function StepsInput({ value, onSave }: { value: number; onSave: (n: number) => v
       />
       <Button title="Spremi" variant="secondary" style={{ paddingVertical: 8 }} onPress={() => onSave(Math.max(0, Math.round(parseNum(text) || 0)))} />
     </Row>
+  );
+}
+
+function WeighIn({ isToday, logged, last, onSave, onMore }: {
+  isToday: boolean;
+  logged?: number;
+  last: number;
+  onSave: (kg: number) => void;
+  onMore: () => void;
+}) {
+  const [text, setText] = useState('');
+  const [editing, setEditing] = useState(false);
+  const save = () => {
+    const kg = parseNum(text);
+    if (!(kg > 30 && kg < 350)) return Alert.alert('Težina', 'Unesi ispravnu težinu u kg.');
+    onSave(kg);
+    setText('');
+    setEditing(false);
+  };
+  const missing = logged === undefined;
+  return (
+    <Card
+      title={isToday ? 'Današnje vaganje' : 'Vaganje'}
+      right={<Pressable onPress={onMore}><Text style={{ color: colors.primary }}>Struk / % masti</Text></Pressable>}
+      style={missing && isToday ? { borderWidth: 1.5, borderColor: colors.warning } : undefined}
+    >
+      <Row style={{ alignItems: 'flex-start' }}>
+        <Ionicons name="information-circle-outline" size={18} color={colors.muted} />
+        <Text style={[styles.muted, { flex: 1, fontSize: 13 }]}>{WEIGH_IN_TIP}</Text>
+      </Row>
+      {!missing && !editing ? (
+        <Row style={{ justifyContent: 'space-between' }}>
+          <Text style={{ fontSize: 22, fontWeight: '800', color: colors.text }}>
+            {fmt(logged, 1)} kg{' '}
+            <Ionicons name="checkmark-circle" size={20} color={colors.success} />
+          </Text>
+          <Button title="Promijeni" variant="secondary" style={{ paddingVertical: 8 }} onPress={() => { setText(String(logged).replace('.', ',')); setEditing(true); }} />
+        </Row>
+      ) : (
+        <Row>
+          <TextInput
+            value={text}
+            onChangeText={setText}
+            placeholder={`npr. ${fmt(last, 1)}`}
+            placeholderTextColor={colors.muted}
+            keyboardType="decimal-pad"
+            onSubmitEditing={save}
+            style={{
+              flex: 1,
+              borderWidth: 1,
+              borderColor: colors.border,
+              borderRadius: 8,
+              paddingHorizontal: 12,
+              paddingVertical: 8,
+              fontSize: 18,
+              color: colors.text,
+            }}
+          />
+          <Text style={styles.muted}>kg</Text>
+          <Button title="Spremi" style={{ paddingVertical: 9 }} onPress={save} disabled={!text.trim()} />
+        </Row>
+      )}
+      {missing && isToday && <Text style={{ color: colors.warning, fontSize: 12 }}>Danas još nisi izvagan.</Text>}
+    </Card>
   );
 }

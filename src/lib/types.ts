@@ -98,4 +98,17 @@ export interface AppState {
   foods: Record<string, Food>;
   /** Food ids, most recently used first. */
   recentFoodIds: string[];
+  /** Weekly progress photos keyed by the Monday of the week. */
+  photos: Record<DateKey, PhotoSet>;
+}
+
+export type PhotoPose = 'front' | 'back' | 'side';
+
+export interface PhotoSet {
+  /** Monday of the week the photos belong to. */
+  week: DateKey;
+  /** file:// URIs of copies in the app's document directory. */
+  front?: string;
+  back?: string;
+  side?: string;
 }

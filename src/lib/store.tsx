@@ -2,7 +2,9 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { createContext, ReactNode, useContext, useEffect, useMemo, useReducer, useRef, useState } from 'react';
 
 import { scaleNutrients } from './calc';
-import type { AppState, DateKey, DayExtras, DiaryEntry, ExerciseEntry, Food, MealType, Profile, WeightEntry } from './types';
+import type {
+  AppState, DateKey, DayExtras, DiaryEntry, ExerciseEntry, Food, MealType, PhotoPose, Profile, WeightEntry,
+} from './types';
 
 const STORAGE_KEY = 'fitnrsspal:state:v1';
 const MAX_RECENT = 40;
@@ -15,6 +17,7 @@ export const EMPTY_STATE: AppState = {
   extras: {},
   foods: {},
   recentFoodIds: [],
+  photos: {},
 };
 
 export function newId(): string {
@@ -33,6 +36,7 @@ type Action =
   | { type: 'setWeight'; entry: WeightEntry }
   | { type: 'removeWeight'; date: DateKey }
   | { type: 'setExtras'; date: DateKey; patch: Partial<DayExtras> }
+  | { type: 'setPhoto'; week: DateKey; pose: PhotoPose; uri: string | undefined }
   | { type: 'reset' };
 
 function touchRecent(ids: string[], id: string): string[] {
@@ -88,6 +92,13 @@ export function reducer(state: AppState, action: Action): AppState {
       const prev = state.extras[action.date] ?? { waterMl: 0, steps: 0 };
       return { ...state, extras: { ...state.extras, [action.date]: { ...prev, ...action.patch } } };
     }
+    case 'setPhoto': {
+      const prev = state.photos[action.week] ?? { week: action.week };
+      const next = { ...prev, [action.pose]: action.uri };
+      const photos = { ...state.photos, [action.week]: next };
+      if (!next.front && !next.back && !next.side) delete photos[action.week];
+      return { ...state, photos };
+    }
     case 'reset':
       return EMPTY_STATE;
   }
@@ -122,6 +133,8 @@ function useActions(dispatch: React.Dispatch<Action>) {
       setWeight: (entry: WeightEntry) => dispatch({ type: 'setWeight', entry }),
       removeWeight: (date: DateKey) => dispatch({ type: 'removeWeight', date }),
       setExtras: (date: DateKey, patch: Partial<DayExtras>) => dispatch({ type: 'setExtras', date, patch }),
+      setPhoto: (week: DateKey, pose: PhotoPose, uri: string | undefined) =>
+        dispatch({ type: 'setPhoto', week, pose, uri }),
       reset: () => dispatch({ type: 'reset' }),
     }),
     [dispatch],
