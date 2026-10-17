@@ -15,7 +15,8 @@ interface OffProduct {
   product_name?: string;
   product_name_hr?: string;
   product_name_en?: string;
-  brands?: string;
+  /** A comma-separated string from the product API, an array from search. */
+  brands?: string | string[];
   nutriments?: Record<string, number | string | undefined>;
   nutrition_data_per?: string;
   serving_size?: string;
@@ -65,7 +66,7 @@ export function productToFood(p: OffProduct, barcode?: string): Food | null {
   return {
     id: code ? `off:${code}` : `off:${name}`,
     name: name.trim(),
-    brand: p.brands?.split(',')[0]?.trim() || undefined,
+    brand: (Array.isArray(p.brands) ? p.brands[0] : p.brands?.split(',')[0])?.trim() || undefined,
     barcode: code,
     per100g,
     servingSizeG: serving && serving > 0 ? serving : undefined,
@@ -125,14 +126,21 @@ export async function lookupBarcode(barcode: string): Promise<LookupResult> {
   return best;
 }
 
+// Text search runs on Open Food Facts' dedicated search service; the old
+// /cgi/search.pl endpoint is frequently overloaded and answers 503.
+const SEARCH_URL = 'https://search.openfoodfacts.org/search';
+const SEARCH_FIELDS = [
+  'code', 'product_name', 'brands', 'nutriments', 'serving_size', 'serving_quantity', 'image_front_small_url',
+].join(',');
+
 export async function searchProducts(query: string): Promise<Food[]> {
   const url =
-    `${BASE}/cgi/search.pl?search_terms=${encodeURIComponent(query)}` +
-    `&search_simple=1&action=process&json=1&page_size=25&fields=${FIELDS}`;
+    `${SEARCH_URL}?q=${encodeURIComponent(query)}&langs=hr,en&page_size=40` +
+    `&fields=${SEARCH_FIELDS}`;
   const res = await fetch(url, { headers: HEADERS });
   if (!res.ok) throw new Error(`HTTP ${res.status}`);
-  const json = (await res.json()) as { products?: OffProduct[] };
-  return (json.products ?? [])
+  const json = (await res.json()) as { hits?: OffProduct[] };
+  return (json.hits ?? [])
     .map((p) => productToFood(p))
     .filter((f): f is Food => f !== null);
 }

@@ -109,6 +109,12 @@ test('productToFood reads plain and prepared values', () => {
   assert.equal(prepared?.per100g.kcal, 50);
 });
 
+test('productToFood accepts brands as an array from search results', () => {
+  const f = productToFood({ code: '93497466', product_name: 'Heineken', brands: ['Heineken', 'X'], nutriments: { 'energy-kcal_100g': 42 } });
+  assert.equal(f?.brand, 'Heineken');
+  assert.equal(f?.barcode, '93497466');
+});
+
 test('barcodeVariants covers UPC/EAN/GTIN forms', () => {
   const v = barcodeVariants('036000291452');
   assert.ok(v.includes('036000291452'));

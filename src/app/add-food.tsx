@@ -40,7 +40,8 @@ export default function AddFood() {
     try {
       setOnline(await searchProducts(query.trim()));
     } catch (e) {
-      setError('Pretraga nije uspjela. Provjeri internetsku vezu.');
+      const detail = e instanceof Error ? e.message : String(e);
+      setError(`Pretraga nije uspjela (${detail}). Provjeri internetsku vezu ili pokušaj kasnije.`);
     } finally {
       setLoading(false);
     }
