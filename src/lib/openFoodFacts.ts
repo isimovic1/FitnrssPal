@@ -4,7 +4,7 @@ import type { Food, Nutrients } from './types';
 // MyFitnessPal's barcode scanner relies on. No API key is needed, but they ask
 // clients to identify themselves with a User-Agent.
 const BASE = 'https://world.openfoodfacts.org';
-const HEADERS = { 'User-Agent': 'FitnrssPal/1.0 (personal calorie tracker)' };
+const HEADERS = { 'User-Agent': 'FitnessPal/1.0 (personal calorie tracker)' };
 const FIELDS = [
   'code', 'product_name', 'product_name_hr', 'product_name_en', 'brands',
   'nutriments', 'nutrition_data_per', 'serving_size', 'serving_quantity', 'image_front_small_url',

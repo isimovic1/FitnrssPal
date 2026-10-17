@@ -1,6 +1,6 @@
 {
   "expo": {
-    "name": "FitnrssPal",
+    "name": "FitnessPal",
     "slug": "fitnrsspal",
     "version": "1.0.0",
     "orientation": "portrait",
@@ -28,7 +28,7 @@
       [
         "expo-camera",
         {
-          "cameraPermission": "FitnrssPal koristi kameru za skeniranje bar-kodova namirnica.",
+          "cameraPermission": "FitnessPal koristi kameru za skeniranje bar-kodova namirnica.",
           "microphonePermission": false,
           "recordAudioAndroid": false
         }

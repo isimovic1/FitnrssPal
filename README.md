@@ -1,4 +1,4 @@
-# FitnrssPal
+# FitnessPal
 
 Mobilna aplikacija za praćenje kalorija, težine i napretka (u stilu MyFitnessPala), napravljena u
 [Expo](https://expo.dev) / React Nativeu — radi na Androidu i iOS-u (i u browseru za testiranje).

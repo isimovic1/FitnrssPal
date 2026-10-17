@@ -13,7 +13,7 @@ export default function Onboarding() {
     <SafeAreaView style={{ flex: 1, backgroundColor: colors.bg }}>
       <ScrollView contentContainerStyle={{ padding: spacing.lg, gap: spacing.md, paddingBottom: 48 }} keyboardShouldPersistTaps="handled">
         <View style={{ gap: spacing.xs, marginBottom: spacing.sm }}>
-          <Text style={styles.h1}>Dobrodošao u FitnrssPal 👋</Text>
+          <Text style={styles.h1}>Dobrodošao u FitnessPal 👋</Text>
           <Text style={styles.muted}>
             Unesi osnovne podatke pa ćemo izračunati tvoj dnevni kalorijski cilj, deficit i makronutrijente.
           </Text>

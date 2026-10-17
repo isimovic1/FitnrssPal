@@ -55,17 +55,17 @@ jobs:
           unzip -p "$apk" 'classes*.dex' | grep -a -q 'com/google/mlkit/vision/barcode/BarcodeScanning;'
 
       - name: Rename APK
-        run: cp android/app/build/outputs/apk/release/app-release.apk FitnrssPal-${{ github.run_number }}.apk
+        run: cp android/app/build/outputs/apk/release/app-release.apk FitnessPal-${{ github.run_number }}.apk
 
       - name: Publish release
         uses: softprops/action-gh-release@v2
         with:
           tag_name: android-build-${{ github.run_number }}
-          name: FitnrssPal Android build ${{ github.run_number }}
+          name: FitnessPal Android build ${{ github.run_number }}
           target_commitish: ${{ github.sha }}
           prerelease: true
           body: |
             Android APK built from `${{ github.ref_name }}` @ ${{ github.sha }}.
             Open this page on your phone, download the .apk and install it
             (allow "Install unknown apps" for your browser when asked).
-          files: FitnrssPal-${{ github.run_number }}.apk
+          files: FitnessPal-${{ github.run_number }}.apk
