@@ -1,5 +1,5 @@
 import Ionicons from '@expo/vector-icons/Ionicons';
-import { BarcodeScanningResult, CameraView, useCameraPermissions } from 'expo-camera';
+import { BarcodeScanningResult, CameraView, scanFromURLAsync, useCameraPermissions } from 'expo-camera';
 import * as Haptics from 'expo-haptics';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useEffect, useRef, useState } from 'react';
@@ -32,6 +32,11 @@ export default function Scan() {
   const [torch, setTorch] = useState(false);
   const [manual, setManual] = useState('');
   const [mode, setMode] = useState<Mode>(GOOGLE_SCANNER ? 'google' : 'camera');
+  // Why the Google scanner is not in use, shown small on the camera screen to help diagnose devices.
+  const [fallbackReason, setFallbackReason] = useState(
+    Platform.OS === 'android' && !GOOGLE_SCANNER ? 'Google skener nije dostupan na ovom uređaju' : '',
+  );
+  const cameraRef = useRef<CameraView>(null);
   // Camera fires many events per second; only handle one code at a time.
   const handling = useRef(false);
   const release = () => (handling.current = false);
@@ -88,7 +93,25 @@ export default function Scan() {
       const message = e instanceof Error ? e.message : String(e);
       if (/cancel/i.test(message)) return;
       // No Play Services (or the scanner module failed): use our own camera view.
+      setFallbackReason(`Google skener: ${message}`);
       setMode('camera');
+    }
+  };
+
+  // Fallback for devices where live frame analysis reports nothing: take a
+  // photo and let ML Kit look for a barcode in the still image.
+  const scanPhoto = async () => {
+    if (busy || handling.current) return;
+    setBusy(true);
+    try {
+      const photo = await cameraRef.current?.takePictureAsync({ quality: 0.8 });
+      const results = photo ? await scanFromURLAsync(photo.uri, [...BARCODE_TYPES]) : [];
+      setBusy(false);
+      if (results.length) handleCode(results[0].data);
+      else Alert.alert('Bar-kod nije pronađen', 'Približi bar-kod da zauzme veći dio slike, izbjegni odsjaj i pokušaj ponovo.');
+    } catch (e) {
+      setBusy(false);
+      Alert.alert('Skeniranje slike nije uspjelo', e instanceof Error ? e.message : String(e));
     }
   };
 
@@ -146,6 +169,7 @@ export default function Scan() {
     <View style={s.black}>
       {permission.granted ? (
         <CameraView
+          ref={cameraRef}
           style={StyleSheet.absoluteFill}
           facing="back"
           enableTorch={torch}
@@ -177,7 +201,13 @@ export default function Scan() {
           </View>
         )}
 
-        <View style={s.bottom}>{manualEntry}</View>
+        <View style={[s.bottom, { gap: spacing.sm }]}>
+          {permission.granted && !busy && (
+            <Button title="Slikaj bar-kod" onPress={scanPhoto} style={{ paddingVertical: 10 }} />
+          )}
+          {manualEntry}
+          {fallbackReason ? <Text style={s.hint}>{fallbackReason}</Text> : null}
+        </View>
       </SafeAreaView>
     </View>
   );
@@ -189,6 +219,7 @@ const s = StyleSheet.create({
   overlay: { ...StyleSheet.absoluteFill, justifyContent: 'space-between' },
   topBar: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: spacing.lg },
   frameWrap: { alignItems: 'center' },
+  hint: { color: '#ffffff99', fontSize: 11, textAlign: 'center' },
   frame: { width: 280, height: 170, borderWidth: 3, borderColor: '#fff', borderRadius: 16 },
   bottom: { padding: spacing.lg, minHeight: 90, justifyContent: 'center' },
   manualRow: { flexDirection: 'row', gap: spacing.sm, alignItems: 'center' },
