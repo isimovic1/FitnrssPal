@@ -48,6 +48,12 @@ jobs:
         # which is fine for installing on your own phone.
         run: ./gradlew assembleRelease --no-daemon -PreactNativeArchitectures=arm64-v8a,armeabi-v7a
 
+      - name: Check ML Kit survived the build
+        # Barcode scanning loads ML Kit by reflection; fail if R8 stripped it.
+        run: |
+          apk=android/app/build/outputs/apk/release/app-release.apk
+          unzip -p "$apk" 'classes*.dex' | grep -a -q 'com/google/mlkit/vision/barcode/BarcodeScanning;'
+
       - name: Rename APK
         run: cp android/app/build/outputs/apk/release/app-release.apk FitnrssPal-${{ github.run_number }}.apk
 
