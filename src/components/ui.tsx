@@ -1,5 +1,7 @@
-import { ReactNode } from 'react';
+import { ReactNode, useContext } from 'react';
+import { HeaderHeightContext } from 'expo-router/react-navigation';
 import {
+  KeyboardAvoidingView,
   Pressable,
   ScrollView,
   StyleProp,
@@ -14,16 +16,33 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { colors, radius, spacing } from '../theme';
 
+/**
+ * Shrinks its content above the on-screen keyboard. Android draws edge-to-edge,
+ * so the window is no longer resized for the keyboard and fields near the bottom
+ * would stay hidden behind it.
+ */
+export function KeyboardAware({ children }: { children: ReactNode }) {
+  // Screens without a header (welcome, scanner) have no height to offset.
+  const headerHeight = useContext(HeaderHeightContext) ?? 0;
+  return (
+    <KeyboardAvoidingView style={{ flex: 1 }} behavior="padding" keyboardVerticalOffset={headerHeight}>
+      {children}
+    </KeyboardAvoidingView>
+  );
+}
+
 export function Screen({ children, scroll = true }: { children: ReactNode; scroll?: boolean }) {
   return (
     <SafeAreaView style={styles.screen} edges={['left', 'right']}>
-      {scroll ? (
-        <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
-          {children}
-        </ScrollView>
-      ) : (
-        <View style={[styles.content, { flex: 1 }]}>{children}</View>
-      )}
+      <KeyboardAware>
+        {scroll ? (
+          <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
+            {children}
+          </ScrollView>
+        ) : (
+          <View style={[styles.content, { flex: 1 }]}>{children}</View>
+        )}
+      </KeyboardAware>
     </SafeAreaView>
   );
 }
